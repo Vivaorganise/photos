@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Job photos – Viva Plumbing</title>
+<meta name="robots" content="noindex, nofollow">
+<style>
+  :root{--viva:#13b8e6;--deep:#0a8fbd;--ink:#0f172a;}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink);background:#eef9fd;}
+  .hero{background:var(--viva);background-image:radial-gradient(circle at 20% 20%,rgba(255,255,255,.18) 0 2px,transparent 3px),radial-gradient(circle at 80% 60%,rgba(255,255,255,.12) 0 2px,transparent 3px);background-size:28px 28px,36px 36px;color:#fff;padding:22px 18px 26px;}
+  .brand{display:flex;align-items:center;gap:12px;max-width:1100px;margin:0 auto;}
+  .brand img{height:54px;width:auto;border-radius:8px;}
+  .wordmark{font-weight:300;font-size:30px;line-height:.95;letter-spacing:-.5px}
+  .wordmark b{font-weight:300;display:block}
+  .job{margin:18px auto 0;max-width:1100px;}
+  .job .addr{font-size:22px;font-weight:800;line-height:1.25}
+  .job .meta{margin-top:6px;font-size:15px;opacity:.95}
+  .pill{display:inline-block;margin-top:10px;background:rgba(255,255,255,.22);border-radius:999px;padding:5px 12px;font-size:14px;font-weight:700}
+  .wrap{max-width:1100px;margin:0 auto;padding:14px 10px 30px;}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;}
+  .tile{position:relative;padding:0;border:0;border-radius:10px;overflow:hidden;background:#cfeaf5;aspect-ratio:1/1;cursor:pointer;box-shadow:0 1px 3px rgba(15,23,42,.15)}
+  .tile img{width:100%;height:100%;object-fit:cover;display:block}
+  .play{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:34px;color:#fff;background:rgba(0,0,0,.25)}
+  .msg{background:#fff;border-radius:12px;padding:30px;text-align:center;color:#475569}
+  .foot{text-align:center;color:#475569;font-size:14px;padding:18px 10px 30px;line-height:1.6}
+  .foot b{color:var(--deep)}
+  .lb{position:fixed;inset:0;background:rgba(5,15,25,.94);display:none;align-items:center;justify-content:center;z-index:9}
+  .lb.on{display:flex}
+  .lb img{max-width:100%;max-height:86vh;border-radius:6px}
+  .lb iframe{width:min(100%,960px);height:70vh;border:0;border-radius:6px;background:#000}
+  .lb .x,.lb .nav{position:absolute;background:rgba(255,255,255,.14);color:#fff;border:0;border-radius:999px;font-size:22px;width:46px;height:46px;cursor:pointer}
+  .lb .x{top:12px;right:12px}.lb .prev{left:10px;top:50%}.lb .next{right:10px;top:50%}
+  .lb .cnt{position:absolute;bottom:14px;left:0;right:0;text-align:center;color:#cbd5e1;font-size:14px}
+  .lb .dl{position:absolute;top:14px;left:14px;color:#fff;font-size:14px;text-decoration:none;background:rgba(255,255,255,.14);padding:9px 14px;border-radius:999px}
+</style>
+</head>
+<body>
+<div class="hero">
+  <div class="brand"><img id="logo" alt="Viva Plumbing" style="display:none"><div class="wordmark">viva<b>plumbing</b></div></div>
+  <div class="job"><div class="addr" id="addr">Job photos</div><div class="meta" id="meta">Loading…</div><span class="pill" id="count" style="display:none"></span></div>
+</div>
+<div class="wrap" id="wrap"><div class="msg">Loading the photos…</div></div>
+<div class="foot">Job photos supplied by <b>Viva Plumbing</b><br>info@vivaplumbing.com · 0475 521 500</div>
+<div class="lb" id="lb">
+  <button class="x" id="lbClose" aria-label="Close">✕</button>
+  <button class="nav prev" id="lbPrev" aria-label="Previous">‹</button><button class="nav next" id="lbNext" aria-label="Next">›</button>
+  <a class="dl" id="dl" target="_blank" rel="noopener">Download</a><div id="stage"></div><div class="cnt" id="cnt"></div>
+</div>
+<script>
+  // The Job Photo Linker web app (vivaorganise). Only albums inside the Job Photos folder are served.
+  var API = 'https://script.google.com/macros/s/AKfycbxm1fZOfJeUHPrycO70JJHEW8k5CbDWrP1HtmVIVnogeIVCqc9xYSTvmSVmDoygipAV8g/exec';
+  var ITEMS = [], at = 0, sx = null;
+  function $(id){ return document.getElementById(id); }
+  function esc(s){ return String(s == null ? '' : s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+  function thumb(id, w){ return 'https://drive.google.com/thumbnail?id=' + encodeURIComponent(id) + '&sz=w' + w; }
+  function notFound(){ $('addr').textContent = 'Album not found'; $('meta').textContent = 'Please check the link, or contact info@vivaplumbing.com'; $('wrap').innerHTML = ''; }
+  function render(d){
+    document.title = 'Job photos – ' + (d.address || 'Viva Plumbing');
+    $('addr').textContent = d.address || 'Job photos';
+    $('meta').textContent = [d.date, d.ref].filter(Boolean).join(' · ');
+    if (d.logo){ $('logo').src = thumb(d.logo, 200); $('logo').style.display = ''; }
+    ITEMS = d.items || [];
+    var np = ITEMS.filter(function(i){ return !i.v; }).length, nv = ITEMS.length - np;
+    var c = [np ? np + ' photo' + (np > 1 ? 's' : '') : '', nv ? nv + ' video' + (nv > 1 ? 's' : '') : ''].filter(Boolean).join(' · ');
+    if (c){ $('count').textContent = c; $('count').style.display = ''; }
+    if (!ITEMS.length){ $('wrap').innerHTML = '<div class="msg">Photos for this job are on their way.</div>'; return; }
+    $('wrap').innerHTML = '<div class="grid">' + ITEMS.map(function(i, k){
+      return '<button class="tile" data-k="' + k + '" aria-label="' + (i.v ? 'Play video ' : 'Open photo ') + (k + 1) + '"><img loading="lazy" src="' + thumb(i.id, 600) + '" alt="">' + (i.v ? '<span class="play">▶</span>' : '') + '</button>';
+    }).join('') + '</div>';
+    [].forEach.call(document.querySelectorAll('.tile'), function(b){ b.addEventListener('click', function(){ openAt(+b.getAttribute('data-k')); }); });
+  }
+  function show(){
+    var i = ITEMS[at];
+    $('stage').innerHTML = i.v ? '<iframe allow="autoplay" allowfullscreen src="https://drive.google.com/file/d/' + esc(i.id) + '/preview"></iframe>' : '<img src="' + thumb(i.id, 2000) + '" alt="">';
+    $('cnt').textContent = (at + 1) + ' of ' + ITEMS.length;
+    $('dl').href = 'https://drive.google.com/uc?export=download&id=' + encodeURIComponent(i.id);
+  }
+  function openAt(k){ at = k; show(); $('lb').classList.add('on'); }
+  function closeLb(){ $('lb').classList.remove('on'); $('stage').innerHTML = ''; }
+  function step(d){ at = (at + d + ITEMS.length) % ITEMS.length; show(); }
+  $('lbClose').onclick = closeLb; $('lbPrev').onclick = function(){ step(-1); }; $('lbNext').onclick = function(){ step(1); };
+  $('lb').addEventListener('click', function(e){ if (e.target === $('lb')) closeLb(); });
+  document.addEventListener('keydown', function(e){ if (!$('lb').classList.contains('on')) return; if (e.key === 'Escape') closeLb(); if (e.key === 'ArrowRight') step(1); if (e.key === 'ArrowLeft') step(-1); });
+  $('lb').addEventListener('touchstart', function(e){ sx = e.touches[0].clientX; }, { passive: true });
+  $('lb').addEventListener('touchend', function(e){ if (sx === null) return; var dx = e.changedTouches[0].clientX - sx; if (Math.abs(dx) > 50) step(dx < 0 ? 1 : -1); sx = null; });
+
+  var a = new URLSearchParams(location.search).get('a') || '';
+  if (!/^[\w-]{20,}$/.test(a)) notFound();
+  else fetch(API + '?json=1&a=' + encodeURIComponent(a), { credentials: 'omit' })   // no Google login sent: avoids the multi-account bug
+    .then(function(r){ return r.json(); })
+    .then(function(d){ if (d && d.ok) render(d); else notFound(); })
+    .catch(function(){ $('meta').textContent = 'Could not load the photos - please refresh the page.'; $('wrap').innerHTML = ''; });
+</script>
+</body>
+</html>
