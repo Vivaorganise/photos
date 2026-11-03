@@ -34,6 +34,26 @@
   .lb .x{top:12px;right:12px}.lb .prev{left:10px;top:50%}.lb .next{right:10px;top:50%}
   .lb .cnt{position:absolute;bottom:14px;left:0;right:0;text-align:center;color:#cbd5e1;font-size:14px}
   .lb .dl{position:absolute;top:14px;left:14px;color:#fff;font-size:14px;text-decoration:none;background:rgba(255,255,255,.14);padding:9px 14px;border-radius:999px}
+  .mail{background:none;border:0;padding:0;font:inherit;color:inherit;cursor:pointer;text-decoration:underline;text-decoration-color:rgba(71,85,105,.35);text-underline-offset:3px}
+  .ask{display:none;margin:10px auto 0;max-width:320px;text-align:center}
+  .ask.on{display:block}
+  .ask label{display:block;font-size:13px;color:#64748b;margin-bottom:6px}
+  .ask .row{display:flex;gap:6px;border-bottom:1px solid #cbd5e1;padding-bottom:4px}
+  .ask input{flex:1;min-width:0;border:0;background:transparent;font:inherit;font-size:15px;color:var(--ink);padding:6px 2px;outline:none}
+  .ask button{border:0;background:none;color:var(--deep);font:inherit;font-weight:700;cursor:pointer;padding:6px 4px}
+  .ask .note{font-size:13px;color:#64748b;min-height:18px;margin-top:6px}
+  .tile .tick{position:absolute;top:8px;left:8px;width:26px;height:26px;border-radius:999px;border:2px solid #fff;background:rgba(15,23,42,.35);display:none}
+  .editing .tile .tick{display:block}
+  .tile.sel{outline:4px solid var(--deep);outline-offset:-4px}
+  .tile.sel img{opacity:.5}
+  .tile.sel .tick{background:var(--deep)}
+  .tile.sel .tick:after{content:"✓";color:#fff;font-size:15px;font-weight:700;position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
+  .ebar{display:none;position:sticky;bottom:0;background:#fff;border-top:1px solid #cfeaf5;padding:10px 12px;gap:8px;align-items:center;justify-content:center;flex-wrap:wrap;z-index:5}
+  .editing + .ebar,.ebar.on{display:flex}
+  .ebar button{border:0;border-radius:999px;padding:10px 16px;font:inherit;font-weight:700;cursor:pointer}
+  .ebar .go{background:var(--viva);color:#fff}.ebar .go:disabled{opacity:.5}
+  .ebar .done{background:#e2e8f0;color:var(--ink)}
+  .ebar span{font-size:14px;color:#475569;width:100%;text-align:center}
 </style>
 </head>
 <body>
@@ -42,7 +62,10 @@
   <div class="job"><div class="addr" id="addr">Job photos</div><div class="meta" id="meta">Loading…</div><span class="pill" id="count" style="display:none"></span></div>
 </div>
 <div class="wrap" id="wrap"><div class="msg">Loading the photos…</div></div>
-<div class="foot">Job photos supplied by <b>Viva Plumbing</b><br>info@vivaplumbing.com · 0475 521 500</div>
+<div class="ebar" id="ebar"><span id="emsg">Tap the photos to select them.</span><button class="go" id="eGo" disabled>Remove</button><button class="done" id="eDone">Done</button></div>
+<div class="foot">Job photos supplied by <b>Viva Plumbing</b><br><button class="mail" id="mail" type="button">info@vivaplumbing.com</button> · 0475 521 500
+  <div class="ask" id="ask"><label for="askIn">Send us an email</label><div class="row"><input id="askIn" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Your email address"><button id="askGo" type="button">Send</button></div><div class="note" id="askNote"></div></div>
+</div>
 <div class="lb" id="lb">
   <button class="x" id="lbClose" aria-label="Close">✕</button>
   <button class="nav prev" id="lbPrev" aria-label="Previous">‹</button><button class="nav next" id="lbNext" aria-label="Next">›</button>
@@ -51,7 +74,7 @@
 <script>
   // The Job Photo Linker web app (vivaorganise). Only albums inside the Job Photos folder are served.
   var API = 'https://script.google.com/macros/s/AKfycbxm1fZOfJeUHPrycO70JJHEW8k5CbDWrP1HtmVIVnogeIVCqc9xYSTvmSVmDoygipAV8g/exec';
-  var ITEMS = [], at = 0, sx = null;
+  var ITEMS = [], at = 0, sx = null, EDIT = '', SEL = {};
   function $(id){ return document.getElementById(id); }
   function esc(s){ return String(s == null ? '' : s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
   function thumb(id, w){ return 'https://drive.google.com/thumbnail?id=' + encodeURIComponent(id) + '&sz=w' + w; }
@@ -69,7 +92,11 @@
     $('wrap').innerHTML = '<div class="grid">' + ITEMS.map(function(i, k){
       return '<button class="tile" data-k="' + k + '" aria-label="' + (i.v ? 'Play video ' : 'Open photo ') + (k + 1) + '"><img loading="lazy" src="' + thumb(i.id, 600) + '" alt="">' + (i.v ? '<span class="play">▶</span>' : '') + '</button>';
     }).join('') + '</div>';
-    [].forEach.call(document.querySelectorAll('.tile'), function(b){ b.addEventListener('click', function(){ openAt(+b.getAttribute('data-k')); }); });
+    [].forEach.call(document.querySelectorAll('.tile'), function(b){
+      b.insertAdjacentHTML('beforeend', '<span class="tick"></span>');
+      b.addEventListener('click', function(){ if (EDIT) pick(b); else openAt(+b.getAttribute('data-k')); });
+    });
+    if (EDIT) $('wrap').firstChild.classList.add('editing');
   }
   function show(){
     var i = ITEMS[at];
@@ -87,11 +114,48 @@
   $('lb').addEventListener('touchend', function(e){ if (sx === null) return; var dx = e.changedTouches[0].clientX - sx; if (Math.abs(dx) > 50) step(dx < 0 ? 1 : -1); sx = null; });
 
   var a = new URLSearchParams(location.search).get('a') || '';
-  if (!/^[\w-]{20,}$/.test(a)) notFound();
-  else fetch(API + '?json=1&a=' + encodeURIComponent(a), { credentials: 'omit' })   // no Google login sent: avoids the multi-account bug
-    .then(function(r){ return r.json(); })
-    .then(function(d){ if (d && d.ok) render(d); else notFound(); })
-    .catch(function(){ $('meta').textContent = 'Could not load the photos - please refresh the page.'; $('wrap').innerHTML = ''; });
+  function load(){
+    return fetch(API + '?json=1&a=' + encodeURIComponent(a), { credentials: 'omit' })   // no Google login sent: avoids the multi-account bug
+      .then(function(r){ return r.json(); })
+      .then(function(d){ if (d && d.ok) render(d); else notFound(); })
+      .catch(function(){ $('meta').textContent = 'Could not load the photos - please refresh the page.'; $('wrap').innerHTML = ''; });
+  }
+  if (!/^[\w-]{20,}$/.test(a)) notFound(); else load();
+
+  // The email address opens a small "Send us an email" box. An email address (or nothing) opens the mail app as usual.
+  function post(body){
+    return fetch(API, { method: 'POST', credentials: 'omit', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body) }).then(function(r){ return r.json(); });
+  }
+  $('mail').onclick = function(){ $('ask').classList.toggle('on'); if ($('ask').classList.contains('on')) $('askIn').focus(); };
+  function send(){
+    var v = $('askIn').value.trim();
+    if (!v || v.indexOf('@') !== -1 || !a){ location.href = 'mailto:info@vivaplumbing.com'; return; }
+    $('askGo').disabled = true; $('askNote').textContent = 'Sending…';
+    post({ act: 'check', a: a, code: v }).then(function(r){
+      $('askGo').disabled = false;
+      if (r && r.ok){ EDIT = v; $('askIn').value = ''; $('askNote').textContent = ''; $('ask').classList.remove('on'); startEdit(); }
+      else $('askNote').textContent = 'Please check the email address.';
+    }).catch(function(){ $('askGo').disabled = false; $('askNote').textContent = 'Could not send - please try again.'; });
+  }
+  $('askGo').onclick = send;
+  $('askIn').addEventListener('keyup', function(e){ if (e.key === 'Enter') send(); });
+
+  function selCount(){ return Object.keys(SEL).length; }
+  function startEdit(){ SEL = {}; var g = document.querySelector('#wrap .grid'); if (g) g.classList.add('editing'); $('ebar').classList.add('on'); updBar(); window.scrollTo(0, 0); }
+  function stopEdit(){ EDIT = ''; SEL = {}; var g = document.querySelector('#wrap .grid'); if (g) g.classList.remove('editing'); [].forEach.call(document.querySelectorAll('.tile.sel'), function(t){ t.classList.remove('sel'); }); $('ebar').classList.remove('on'); }
+  function pick(b){ var id = ITEMS[+b.getAttribute('data-k')].id; if (SEL[id]){ delete SEL[id]; b.classList.remove('sel'); } else { SEL[id] = 1; b.classList.add('sel'); } updBar(); }
+  function updBar(){ var n = selCount(); $('eGo').disabled = !n; $('eGo').textContent = n ? 'Remove ' + n : 'Remove'; $('emsg').textContent = n ? n + ' selected - they go to the Drive Bin.' : 'Tap the photos to select them.'; }
+  $('eDone').onclick = stopEdit;
+  $('eGo').onclick = function(){
+    var ids = Object.keys(SEL); if (!ids.length) return;
+    if ($('eGo').getAttribute('data-arm') !== '1'){ $('eGo').setAttribute('data-arm', '1'); $('eGo').textContent = 'Tap again to remove ' + ids.length; setTimeout(function(){ $('eGo').removeAttribute('data-arm'); updBar(); }, 4000); return; }
+    $('eGo').removeAttribute('data-arm'); $('eGo').disabled = true; $('emsg').textContent = 'Removing…';
+    post({ act: 'remove', a: a, code: EDIT, ids: ids }).then(function(r){
+      $('emsg').textContent = (r && r.msg) || 'Done.';
+      if (r && r.ok){ SEL = {}; load().then(function(){ var g = document.querySelector('#wrap .grid'); if (g && EDIT) g.classList.add('editing'); updBar(); $('emsg').textContent = r.msg; }); }
+      else { $('eGo').disabled = false; if (/passcode|turned off/i.test((r && r.msg) || '')) stopEdit(); }
+    }).catch(function(){ $('eGo').disabled = false; $('emsg').textContent = 'Could not remove - please try again.'; });
+  };
 </script>
 </body>
 </html>
