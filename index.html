@@ -28,7 +28,9 @@
   .foot b{color:var(--deep)}
   .lb{position:fixed;inset:0;background:rgba(5,15,25,.94);display:none;align-items:center;justify-content:center;z-index:9}
   .lb.on{display:flex}
-  .lb img{max-width:100%;max-height:86vh;border-radius:6px}
+  .lb img{max-width:100%;max-height:86vh;border-radius:6px;touch-action:none;transform-origin:0 0;will-change:transform;cursor:zoom-in;user-select:none;-webkit-user-select:none;-webkit-user-drag:none}
+  .lb img.zoomed{cursor:grab;border-radius:0}
+  .lb .hint{position:absolute;bottom:38px;left:0;right:0;text-align:center;color:#94a3b8;font-size:12px}
   .lb iframe{width:min(100%,960px);height:70vh;border:0;border-radius:6px;background:#000}
   .lb .x,.lb .nav{position:absolute;background:rgba(255,255,255,.14);color:#fff;border:0;border-radius:999px;font-size:22px;width:46px;height:46px;cursor:pointer}
   .lb .x{top:12px;right:12px}.lb .prev{left:10px;top:50%}.lb .next{right:10px;top:50%}
@@ -54,6 +56,8 @@
   .ebar .go{background:var(--viva);color:#fff}.ebar .go:disabled{opacity:.5}
   .ebar .done{background:#e2e8f0;color:var(--ink)}
   .ebar span{font-size:14px;color:#475569;width:100%;text-align:center}
+  .ebar .turn{background:#e0f2fe;color:var(--deep)}
+  .tile img{transition:transform .2s}
 </style>
 </head>
 <body>
@@ -62,19 +66,19 @@
   <div class="job"><div class="addr" id="addr">Job photos</div><div class="meta" id="meta">Loading…</div><span class="pill" id="count" style="display:none"></span></div>
 </div>
 <div class="wrap" id="wrap"><div class="msg">Loading the photos…</div></div>
-<div class="ebar" id="ebar"><span id="emsg">Tap the photos to select them.</span><button class="go" id="eGo" disabled>Remove</button><button class="done" id="eDone">Done</button></div>
+<div class="ebar" id="ebar"><span id="emsg">Tap the photos to select them.</span><button class="turn" id="eTurn" disabled>Turn ↻</button><button class="go" id="eSave" style="display:none">Save turns</button><button class="go" id="eGo" disabled>Remove</button><button class="done" id="eDone">Done</button></div>
 <div class="foot">Job photos supplied by <b>Viva Plumbing</b><br><button class="mail" id="mail" type="button">info@vivaplumbing.com</button> · 0475 521 500
   <div class="ask" id="ask"><label for="askIn">Send us an email</label><div class="row"><input id="askIn" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Your email address"><button id="askGo" type="button">Send</button></div><div class="note" id="askNote"></div></div>
 </div>
 <div class="lb" id="lb">
   <button class="x" id="lbClose" aria-label="Close">✕</button>
   <button class="nav prev" id="lbPrev" aria-label="Previous">‹</button><button class="nav next" id="lbNext" aria-label="Next">›</button>
-  <a class="dl" id="dl" target="_blank" rel="noopener">Download</a><div id="stage"></div><div class="cnt" id="cnt"></div>
+  <a class="dl" id="dl" target="_blank" rel="noopener">Download</a><div id="stage"></div><div class="hint" id="hint">Pinch or double-tap to zoom</div><div class="cnt" id="cnt"></div>
 </div>
 <script>
   // The Job Photo Linker web app (vivaorganise). Only albums inside the Job Photos folder are served.
   var API = 'https://script.google.com/macros/s/AKfycbxm1fZOfJeUHPrycO70JJHEW8k5CbDWrP1HtmVIVnogeIVCqc9xYSTvmSVmDoygipAV8g/exec';
-  var ITEMS = [], at = 0, sx = null, EDIT = '', SEL = {};
+  var ITEMS = [], at = 0, sx = null, EDIT = '', SEL = {}, TURN = {};
   function $(id){ return document.getElementById(id); }
   function esc(s){ return String(s == null ? '' : s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
   function thumb(id, w){ return 'https://drive.google.com/thumbnail?id=' + encodeURIComponent(id) + '&sz=w' + w; }
@@ -102,6 +106,8 @@
     var i = ITEMS[at];
     $('stage').innerHTML = i.v ? '<iframe allow="autoplay" allowfullscreen src="https://drive.google.com/file/d/' + esc(i.id) + '/preview"></iframe>' : '<img src="' + thumb(i.id, 2000) + '" alt="">';
     $('cnt').textContent = (at + 1) + ' of ' + ITEMS.length;
+    $('hint').style.display = i.v ? 'none' : '';
+    zReset(); if (!i.v) zBind($('stage').querySelector('img'), i.id);
     $('dl').href = 'https://drive.google.com/uc?export=download&id=' + encodeURIComponent(i.id);
   }
   function openAt(k){ at = k; show(); $('lb').classList.add('on'); }
@@ -110,8 +116,59 @@
   $('lbClose').onclick = closeLb; $('lbPrev').onclick = function(){ step(-1); }; $('lbNext').onclick = function(){ step(1); };
   $('lb').addEventListener('click', function(e){ if (e.target === $('lb')) closeLb(); });
   document.addEventListener('keydown', function(e){ if (!$('lb').classList.contains('on')) return; if (e.key === 'Escape') closeLb(); if (e.key === 'ArrowRight') step(1); if (e.key === 'ArrowLeft') step(-1); });
-  $('lb').addEventListener('touchstart', function(e){ sx = e.touches[0].clientX; }, { passive: true });
-  $('lb').addEventListener('touchend', function(e){ if (sx === null) return; var dx = e.changedTouches[0].clientX - sx; if (Math.abs(dx) > 50) step(dx < 0 ? 1 : -1); sx = null; });
+  $('lb').addEventListener('touchstart', function(e){ sx = (e.touches.length === 1 && Z.s === 1) ? e.touches[0].clientX : null; }, { passive: true });
+  $('lb').addEventListener('touchend', function(e){ if (sx === null || Z.s !== 1 || Z.pinched) { sx = null; return; } var dx = e.changedTouches[0].clientX - sx; if (Math.abs(dx) > 50) step(dx < 0 ? 1 : -1); sx = null; });
+
+  /* Zoom: pinch, double-tap / double-click, mouse wheel; drag to look around while zoomed. */
+  var Z = { s: 1, x: 0, y: 0, img: null, id: '', hi: false, pinched: false };
+  function zApply(){ if (!Z.img) return; Z.img.style.transform = 'translate(' + Z.x + 'px,' + Z.y + 'px) scale(' + Z.s + ')'; Z.img.classList.toggle('zoomed', Z.s > 1); }
+  function zReset(){ Z.s = 1; Z.x = 0; Z.y = 0; Z.hi = false; Z.pinched = false; if (Z.img) { Z.img.style.transform = ''; Z.img.classList.remove('zoomed'); } }
+  function zClamp(){
+    if (!Z.img) return;
+    var w = Z.img.offsetWidth, h = Z.img.offsetHeight;
+    if (Z.s <= 1) { Z.s = 1; Z.x = 0; Z.y = 0; return; }
+    Z.x = Math.min(0, Math.max(w - w * Z.s, Z.x)); Z.y = Math.min(0, Math.max(h - h * Z.s, Z.y));
+  }
+  function zTo(s, cx, cy){   // cx, cy = point on the photo (px from its top-left, unscaled view) to keep still
+    s = Math.max(1, Math.min(6, s));
+    Z.x = cx - (cx - Z.x) * (s / Z.s); Z.y = cy - (cy - Z.y) * (s / Z.s); Z.s = s;
+    zClamp(); zApply();
+    if (Z.s > 1.6 && !Z.hi) { Z.hi = true; var big = new Image(); big.onload = function(){ if (Z.img && Z.img.getAttribute('data-id') === Z.id) Z.img.src = big.src; }; big.src = thumb(Z.id, 4000); }
+  }
+  function zLocal(e, img){ var r = img.parentNode.getBoundingClientRect(), ir = img.getBoundingClientRect(); return { x: e.clientX - (ir.left - Z.x), y: e.clientY - (ir.top - Z.y) }; }
+  function zBind(img, id){
+    Z.img = img; Z.id = id; if (!img) return; img.setAttribute('data-id', id);
+    var lastTap = 0, drag = null, pinch = null;
+    img.addEventListener('dblclick', function(e){ var p = zLocal(e, img); zTo(Z.s > 1 ? 1 : 2.5, p.x, p.y); e.preventDefault(); });
+    img.addEventListener('wheel', function(e){ e.preventDefault(); var p = zLocal(e, img); zTo(Z.s * (e.deltaY < 0 ? 1.25 : 0.8), p.x, p.y); }, { passive: false });
+    img.addEventListener('mousedown', function(e){ if (Z.s <= 1) return; e.preventDefault(); drag = { x: e.clientX - Z.x, y: e.clientY - Z.y }; });
+    window.addEventListener('mousemove', function(e){ if (!drag) return; Z.x = e.clientX - drag.x; Z.y = e.clientY - drag.y; zClamp(); zApply(); });
+    window.addEventListener('mouseup', function(){ drag = null; });
+    img.addEventListener('click', function(e){ e.stopPropagation(); });
+    img.addEventListener('touchstart', function(e){
+      if (e.touches.length === 2) {
+        Z.pinched = true;
+        var t0 = e.touches[0], t1 = e.touches[1];
+        pinch = { d: Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY), s: Z.s, mid: zLocal({ clientX: (t0.clientX + t1.clientX) / 2, clientY: (t0.clientY + t1.clientY) / 2 }, img) };
+        drag = null;
+      } else if (e.touches.length === 1) {
+        var now = Date.now(), t = e.touches[0];
+        if (now - lastTap < 300) { var p = zLocal(t, img); zTo(Z.s > 1 ? 1 : 2.5, p.x, p.y); lastTap = 0; e.preventDefault(); return; }
+        lastTap = now;
+        if (Z.s > 1) drag = { x: t.clientX - Z.x, y: t.clientY - Z.y };
+      }
+    }, { passive: false });
+    img.addEventListener('touchmove', function(e){
+      if (pinch && e.touches.length === 2) {
+        e.preventDefault();
+        var t0 = e.touches[0], t1 = e.touches[1], d = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY);
+        zTo(pinch.s * d / pinch.d, pinch.mid.x, pinch.mid.y);
+      } else if (drag && e.touches.length === 1 && Z.s > 1) {
+        e.preventDefault(); Z.x = e.touches[0].clientX - drag.x; Z.y = e.touches[0].clientY - drag.y; zClamp(); zApply();
+      }
+    }, { passive: false });
+    img.addEventListener('touchend', function(e){ if (e.touches.length < 2) pinch = null; if (!e.touches.length) { drag = null; setTimeout(function(){ Z.pinched = false; }, 50); } });
+  }
 
   var a = new URLSearchParams(location.search).get('a') || '';
   function load(){
@@ -142,9 +199,52 @@
 
   function selCount(){ return Object.keys(SEL).length; }
   function startEdit(){ SEL = {}; var g = document.querySelector('#wrap .grid'); if (g) g.classList.add('editing'); $('ebar').classList.add('on'); updBar(); window.scrollTo(0, 0); }
-  function stopEdit(){ EDIT = ''; SEL = {}; var g = document.querySelector('#wrap .grid'); if (g) g.classList.remove('editing'); [].forEach.call(document.querySelectorAll('.tile.sel'), function(t){ t.classList.remove('sel'); }); $('ebar').classList.remove('on'); }
+  function stopEdit(){ EDIT = ''; SEL = {}; TURN = {}; showTurns(); var g = document.querySelector('#wrap .grid'); if (g) g.classList.remove('editing'); [].forEach.call(document.querySelectorAll('.tile.sel'), function(t){ t.classList.remove('sel'); }); $('ebar').classList.remove('on'); }
   function pick(b){ var id = ITEMS[+b.getAttribute('data-k')].id; if (SEL[id]){ delete SEL[id]; b.classList.remove('sel'); } else { SEL[id] = 1; b.classList.add('sel'); } updBar(); }
-  function updBar(){ var n = selCount(); $('eGo').disabled = !n; $('eGo').textContent = n ? 'Remove ' + n : 'Remove'; $('emsg').textContent = n ? n + ' selected - they go to the Drive Bin.' : 'Tap the photos to select them.'; }
+  function updBar(){
+    var n = selCount(), t = Object.keys(TURN).filter(function(k){ return TURN[k] % 4; }).length;
+    var vids = Object.keys(SEL).some(function(id){ return (ITEMS.filter(function(i){ return i.id === id; })[0] || {}).v; });
+    $('eGo').disabled = !n; $('eGo').textContent = n ? 'Remove ' + n : 'Remove';
+    $('eTurn').disabled = !n || vids;
+    $('eSave').style.display = t ? '' : 'none'; $('eSave').textContent = 'Save ' + t + ' turned';
+    $('emsg').textContent = t ? 'Turn until they look right, then Save.' : vids ? 'Videos can\'t be turned - select photos only.' : n ? n + ' selected.' : 'Tap the photos to select them.';
+  }
+  function showTurns(){
+    [].forEach.call(document.querySelectorAll('.tile'), function(b){ var it = ITEMS[+b.getAttribute('data-k')], r = (TURN[it.id] || 0) % 4, img = b.querySelector('img'); if (img) img.style.transform = r ? 'rotate(' + (r * 90) + 'deg)' : ''; });
+  }
+  $('eTurn').onclick = function(){ Object.keys(SEL).forEach(function(id){ TURN[id] = ((TURN[id] || 0) + 1) % 4; }); showTurns(); updBar(); };
+  // Turn the real picture: fetch it from the album, turn it here, send it back (the old one goes to the Bin).
+  function turnOne(id, q){
+    return post({ act: 'img', a: a, code: EDIT, id: id }).then(function(r){
+      if (!r || !r.ok) throw new Error((r && r.msg) || 'Could not open the photo.');
+      return new Promise(function(res, rej){
+        var im = new Image();
+        im.onload = function(){
+          var c = document.createElement('canvas'), w = im.naturalWidth, h = im.naturalHeight, side = q % 2;
+          c.width = side ? h : w; c.height = side ? w : h;
+          var x = c.getContext('2d'); x.translate(c.width / 2, c.height / 2); x.rotate(q * Math.PI / 2); x.drawImage(im, -w / 2, -h / 2);
+          res(c.toDataURL('image/jpeg', 0.92));
+        };
+        im.onerror = function(){ rej(new Error('Could not read the photo.')); };
+        im.src = 'data:' + (r.mime || 'image/jpeg') + ';base64,' + r.b64;
+      });
+    }).then(function(url){ return post({ act: 'rotate', a: a, code: EDIT, id: id, b64: url.split(',')[1] }); })
+      .then(function(r){ if (!r || !r.ok) throw new Error((r && r.msg) || 'Could not save it.'); });
+  }
+  $('eSave').onclick = function(){
+    var ids = Object.keys(TURN).filter(function(k){ return TURN[k] % 4; }); if (!ids.length) return;
+    $('eSave').disabled = true; var done = 0, fail = '';
+    var next = function(){
+      if (!ids.length){
+        TURN = {}; SEL = {}; $('eSave').disabled = false;
+        load().then(function(){ var g = document.querySelector('#wrap .grid'); if (g && EDIT) g.classList.add('editing'); updBar(); $('emsg').textContent = done + ' turned' + (fail ? ' - ' + fail : '') + '.'; });
+        return;
+      }
+      var id = ids.shift(); $('emsg').textContent = 'Turning ' + (done + 1) + '…';
+      turnOne(id, TURN[id] % 4).then(function(){ done++; next(); }).catch(function(e){ fail = e.message; next(); });
+    };
+    next();
+  };
   $('eDone').onclick = stopEdit;
   $('eGo').onclick = function(){
     var ids = Object.keys(SEL); if (!ids.length) return;
