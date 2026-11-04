@@ -28,9 +28,8 @@
   .foot b{color:var(--deep)}
   .lb{position:fixed;inset:0;background:rgba(5,15,25,.94);display:none;align-items:center;justify-content:center;z-index:9}
   .lb.on{display:flex}
-  .lb img{max-width:100%;max-height:86vh;border-radius:6px;touch-action:none;transform-origin:0 0;will-change:transform;cursor:zoom-in;user-select:none;-webkit-user-select:none;-webkit-user-drag:none}
-  .lb img.zoomed{cursor:grab;border-radius:0}
-  .lb .hint{position:absolute;bottom:38px;left:0;right:0;text-align:center;color:#94a3b8;font-size:12px}
+  .lb img{max-width:100%;max-height:86vh;border-radius:6px;touch-action:none;transform-origin:0 0;will-change:transform;user-select:none;-webkit-user-select:none;-webkit-user-drag:none}
+  .lb img.zoomed{border-radius:0}
   .lb iframe{width:min(100%,960px);height:70vh;border:0;border-radius:6px;background:#000}
   .lb .x,.lb .nav{position:absolute;background:rgba(255,255,255,.14);color:#fff;border:0;border-radius:999px;font-size:22px;width:46px;height:46px;cursor:pointer}
   .lb .x{top:12px;right:12px}.lb .prev{left:10px;top:50%}.lb .next{right:10px;top:50%}
@@ -73,7 +72,7 @@
 <div class="lb" id="lb">
   <button class="x" id="lbClose" aria-label="Close">✕</button>
   <button class="nav prev" id="lbPrev" aria-label="Previous">‹</button><button class="nav next" id="lbNext" aria-label="Next">›</button>
-  <a class="dl" id="dl" target="_blank" rel="noopener">Download</a><div id="stage"></div><div class="hint" id="hint">Pinch or double-tap to zoom</div><div class="cnt" id="cnt"></div>
+  <a class="dl" id="dl" target="_blank" rel="noopener">Download</a><div id="stage"></div><div class="cnt" id="cnt"></div>
 </div>
 <script>
   // The Job Photo Linker web app (vivaorganise). Only albums inside the Job Photos folder are served.
@@ -106,7 +105,6 @@
     var i = ITEMS[at];
     $('stage').innerHTML = i.v ? '<iframe allow="autoplay" allowfullscreen src="https://drive.google.com/file/d/' + esc(i.id) + '/preview"></iframe>' : '<img src="' + thumb(i.id, 2000) + '" alt="">';
     $('cnt').textContent = (at + 1) + ' of ' + ITEMS.length;
-    $('hint').style.display = i.v ? 'none' : '';
     zReset(); if (!i.v) zBind($('stage').querySelector('img'), i.id);
     $('dl').href = 'https://drive.google.com/uc?export=download&id=' + encodeURIComponent(i.id);
   }
