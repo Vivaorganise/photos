@@ -46,6 +46,7 @@
   .tile .tick{position:absolute;top:8px;left:8px;width:26px;height:26px;border-radius:999px;border:2px solid #fff;background:rgba(15,23,42,.35);display:none}
   .editing .tile .tick{display:block}
   .tile.sel{outline:4px solid var(--deep);outline-offset:-4px}
+  .tile .turning{position:absolute;right:8px;bottom:8px;background:rgba(15,23,42,.7);color:#fff;border-radius:999px;padding:2px 8px;font-size:13px}
   .tile.sel img{opacity:.5}
   .tile.sel .tick{background:var(--deep)}
   .tile.sel .tick:after{content:"✓";color:#fff;font-size:15px;font-weight:700;position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
@@ -77,7 +78,7 @@
 <script>
   // The Job Photo Linker web app (vivaorganise). Only albums inside the Job Photos folder are served.
   var API = 'https://script.google.com/macros/s/AKfycbxm1fZOfJeUHPrycO70JJHEW8k5CbDWrP1HtmVIVnogeIVCqc9xYSTvmSVmDoygipAV8g/exec';
-  var ITEMS = [], at = 0, sx = null, EDIT = '', SEL = {}, TURN = {};
+  var ITEMS = [], at = 0, sx = null, EDIT = '', SEL = {}, TURN = {}, PENDING = {}, BUST = {}, PEND_T = null;
   function $(id){ return document.getElementById(id); }
   function esc(s){ return String(s == null ? '' : s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
   function thumb(id, w){ return 'https://drive.google.com/thumbnail?id=' + encodeURIComponent(id) + '&sz=w' + w; }
@@ -87,14 +88,17 @@
     $('addr').textContent = d.address || 'Job photos';
     $('meta').textContent = [d.date, d.ref].filter(Boolean).join(' · ');
     if (d.logo){ $('logo').src = thumb(d.logo, 200); $('logo').style.display = ''; }
-    ITEMS = d.items || [];
+    ITEMS = d.items || []; PENDING = d.turning || {};   // 5 Nov: photos still being turned in the background
     var np = ITEMS.filter(function(i){ return !i.v; }).length, nv = ITEMS.length - np;
     var c = [np ? np + ' photo' + (np > 1 ? 's' : '') : '', nv ? nv + ' video' + (nv > 1 ? 's' : '') : ''].filter(Boolean).join(' · ');
     if (c){ $('count').textContent = c; $('count').style.display = ''; }
     if (!ITEMS.length){ $('wrap').innerHTML = '<div class="msg">Photos for this job are on their way.</div>'; return; }
     $('wrap').innerHTML = '<div class="grid">' + ITEMS.map(function(i, k){
-      return '<button class="tile" data-k="' + k + '" aria-label="' + (i.v ? 'Play video ' : 'Open photo ') + (k + 1) + '"><img loading="lazy" src="' + thumb(i.id, 600) + '" alt="">' + (i.v ? '<span class="play">▶</span>' : '') + '</button>';
+      return '<button class="tile" data-k="' + k + '" aria-label="' + (i.v ? 'Play video ' : 'Open photo ') + (k + 1) + '"><img loading="lazy" src="' + thumb(i.id, 600) + (BUST[i.id] ? '&t=' + BUST[i.id] : '') + '" alt="">' + (i.v ? '<span class="play">▶</span>' : '') + (PENDING[i.id] ? '<span class="turning">↻ turning</span>' : '') + '</button>';
     }).join('') + '</div>';
+    showTurns();
+    // 5 Nov: while photos are still turning, look again every minute (until they're done)
+    clearTimeout(PEND_T); if (Object.keys(PENDING).length) PEND_T = setTimeout(function(){ var ids = Object.keys(PENDING), now = Date.now(); ids.forEach(function(id){ BUST[id] = now; }); load().then(function(){ var g = document.querySelector('#wrap .grid'); if (g && EDIT) g.classList.add('editing'); }); }, 60000);
     [].forEach.call(document.querySelectorAll('.tile'), function(b){
       b.insertAdjacentHTML('beforeend', '<span class="tick"></span>');
       b.addEventListener('click', function(){ if (EDIT) pick(b); else openAt(+b.getAttribute('data-k')); });
@@ -208,7 +212,7 @@
     $('emsg').textContent = t ? 'Turn until they look right, then Save.' : vids ? 'Videos can\'t be turned - select photos only.' : n ? n + ' selected.' : 'Tap the photos to select them.';
   }
   function showTurns(){
-    [].forEach.call(document.querySelectorAll('.tile'), function(b){ var it = ITEMS[+b.getAttribute('data-k')], r = (TURN[it.id] || 0) % 4, img = b.querySelector('img'); if (img) img.style.transform = r ? 'rotate(' + (r * 90) + 'deg)' : ''; });
+    [].forEach.call(document.querySelectorAll('.tile'), function(b){ var it = ITEMS[+b.getAttribute('data-k')], r = ((TURN[it.id] || 0) + (PENDING[it.id] || 0)) % 4, img = b.querySelector('img'); if (img) img.style.transform = r ? 'rotate(' + (r * 90) + 'deg)' : ''; });
   }
   $('eTurn').onclick = function(){ Object.keys(SEL).forEach(function(id){ TURN[id] = ((TURN[id] || 0) + 1) % 4; }); showTurns(); updBar(); };
   // Turn the real picture: fetch it from the album, turn it here, send it back (the old one goes to the Bin).
@@ -229,19 +233,22 @@
     }).then(function(url){ return post({ act: 'rotate', a: a, code: EDIT, id: id, b64: url.split(',')[1] }); })
       .then(function(r){ if (!r || !r.ok) throw new Error((r && r.msg) || 'Could not save it.'); });
   }
+  // 5 Nov: Save sends the turns once. They are turned on Viva's side (no quality lost) and finish in the background,
+  // so this page can be closed straight away. Photos still waiting show "↻ turning".
   $('eSave').onclick = function(){
     var ids = Object.keys(TURN).filter(function(k){ return TURN[k] % 4; }); if (!ids.length) return;
-    $('eSave').disabled = true; var done = 0, fail = '';
-    var next = function(){
-      if (!ids.length){
-        TURN = {}; SEL = {}; $('eSave').disabled = false;
-        load().then(function(){ var g = document.querySelector('#wrap .grid'); if (g && EDIT) g.classList.add('editing'); updBar(); $('emsg').textContent = done + ' turned' + (fail ? ' - ' + fail : '') + '.'; });
-        return;
-      }
-      var id = ids.shift(); $('emsg').textContent = 'Turning ' + (done + 1) + '…';
-      turnOne(id, TURN[id] % 4).then(function(){ done++; next(); }).catch(function(e){ fail = e.message; next(); });
-    };
-    next();
+    var turns = {}; ids.forEach(function(id){ turns[id] = TURN[id] % 4; });
+    $('eSave').disabled = true; $('emsg').textContent = 'Saving ' + ids.length + ' turned…';
+    var ctl = window.AbortController ? new AbortController() : null, timer = setTimeout(function(){ if (ctl) ctl.abort(); }, 60000);
+    fetch(API, { method: 'POST', credentials: 'omit', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ act: 'turn', a: a, code: EDIT, turns: turns }), signal: ctl ? ctl.signal : undefined })
+      .then(function(r){ return r.json(); })
+      .then(function(r){
+        clearTimeout(timer); $('eSave').disabled = false;
+        if (!r || !r.ok){ $('emsg').textContent = (r && r.msg) || 'Could not save the turns.'; return; }
+        var now = Date.now(); ids.forEach(function(id){ BUST[id] = now; }); TURN = {}; SEL = {};
+        return load().then(function(){ var g = document.querySelector('#wrap .grid'); if (g && EDIT) g.classList.add('editing'); showTurns(); updBar(); $('emsg').textContent = r.msg; });
+      })
+      .catch(function(){ clearTimeout(timer); $('eSave').disabled = false; $('emsg').textContent = 'Saved if the connection held - refresh the page in a minute to check.'; });
   };
   $('eDone').onclick = stopEdit;
   $('eGo').onclick = function(){
