@@ -60,6 +60,7 @@
   .ebar .add{background:#dcfce7;color:#166534}
   .ebar .urlrow{display:none;width:100%;gap:8px;justify-content:center}.ebar .urlrow.on{display:flex}
   .ebar .urlrow input{flex:1;max-width:420px;border:1px solid #cbd5e1;border-radius:999px;padding:10px 14px;font:inherit}
+  #upst{display:none;position:fixed;left:50%;bottom:14px;transform:translateX(-50%);max-width:92vw;background:#0f172a;color:#fff;border-radius:999px;padding:10px 18px;font-size:14px;font-weight:600;z-index:60;box-shadow:0 4px 18px rgba(0,0,0,.3);text-align:center}#upst.on{display:block}
   body.dropping:after{content:'Drop to add to this album';position:fixed;inset:0;background:rgba(19,184,230,.85);color:#fff;font-size:26px;font-weight:700;display:flex;align-items:center;justify-content:center;z-index:50;pointer-events:none}
   .tile img{transition:transform .2s}
 </style>
@@ -70,7 +71,7 @@
   <div class="job"><div class="addr" id="addr">Job photos</div><div class="meta" id="meta">Loading…</div><span class="pill" id="count" style="display:none"></span></div>
 </div>
 <div class="wrap" id="wrap"><div class="msg">Loading the photos…</div></div>
-<div class="ebar" id="ebar"><span id="emsg">Tap the photos to select them.</span><div class="urlrow" id="eUrlRow"><input id="eUrl" type="url" placeholder="Paste a link to a photo or video"><button class="go" id="eUrlGo">Add</button></div><input type="file" id="eFile" accept="image/*,video/*" multiple style="display:none"><button class="add" id="eAdd">Add files</button><button class="add" id="eLink">Add link</button><button class="turn" id="eTurn" disabled>Turn ↻</button><button class="go" id="eSave" style="display:none">Save turns</button><button class="go" id="eGo" disabled>Remove</button><button class="done" id="eDone">Done</button></div>
+<div class="ebar" id="ebar"><span id="emsg">Tap the photos to select them.</span><div id="upst"></div><div class="urlrow" id="eUrlRow"><input id="eUrl" type="url" placeholder="Paste a link to a photo or video"><button class="go" id="eUrlGo">Add</button></div><input type="file" id="eFile" accept="image/*,video/*" multiple style="display:none"><button class="add" id="eAdd">Add files</button><button class="add" id="eLink">Add link</button><button class="turn" id="eTurn" disabled>Turn ↻</button><button class="go" id="eSave" style="display:none">Save turns</button><button class="go" id="eGo" disabled>Remove</button><button class="done" id="eDone">Done</button></div>
 <div class="foot">Job photos supplied by <b>Viva Plumbing</b><br><button class="mail" id="mail" type="button">info@vivaplumbing.com</button> · 0475 521 500
   <div class="ask" id="ask"><label for="askIn">Send us an email</label><div class="row"><input id="askIn" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Your email address"><button id="askGo" type="button">Send</button></div><div class="note" id="askNote"></div></div>
 </div>
@@ -207,16 +208,16 @@
   var UPBUSY = false;
   function mimeOf(f){ if (f.type) return f.type; var x = (f.name.split('.').pop() || '').toLowerCase(); return ({ jpg:'image/jpeg', jpeg:'image/jpeg', png:'image/png', heic:'image/heic', heif:'image/heif', webp:'image/webp', gif:'image/gif', mp4:'video/mp4', mov:'video/quicktime', m4v:'video/x-m4v', webm:'video/webm', '3gp':'video/3gpp' })[x] || ''; }
   function b64(blob){ return new Promise(function(res, rej){ var fr = new FileReader(); fr.onload = function(){ res(String(fr.result).split(',')[1] || ''); }; fr.onerror = rej; fr.readAsDataURL(blob); }); }
-  function upOne(f, label){
-    return post({ act: 'addStart', a: a, code: EDIT, name: f.name, mime: mimeOf(f), size: f.size }).then(function(r){
+  function upOne(f, label, code){
+    return post({ act: 'addStart', a: a, code: code, name: f.name, mime: mimeOf(f), size: f.size }).then(function(r){
       if (!r || !r.ok) throw new Error((r && r.msg) || 'Could not start the upload.');
       if (r.exists) return 'there';
       var CH = 3 * 1024 * 1024, off = 0;
       function step(tries){
         var end = Math.min(off + CH, f.size);
-        return b64(f.slice(off, end)).then(function(s){ return post({ act: 'addChunk', id: r.id, code: EDIT, offset: off, b64: s }); }).then(function(c){
+        return b64(f.slice(off, end)).then(function(s){ return post({ act: 'addChunk', id: r.id, code: code, offset: off, b64: s }); }).then(function(c){
           if (!c || !c.ok) throw new Error((c && c.msg) || 'The upload failed.');
-          off = end; $('emsg').textContent = label + ' - ' + Math.round(off / f.size * 100) + '%';
+          off = end; upMsg(label + ' - ' + Math.round(off / f.size * 100) + '%');
           if (c.done) return 'ok';
           if (off >= f.size) throw new Error('The upload did not finish.');
           return step(0);
@@ -225,12 +226,14 @@
       return step(0);
     });
   }
-  function reloadEdit(msg){ return load().then(function(){ var g = document.querySelector('#wrap .grid'); if (g && EDIT) g.classList.add('editing'); updBar(); $('emsg').textContent = msg; }); }
+  function upMsg(t, hold){ $('emsg').textContent = t; var u = $('upst'); u.textContent = t; u.classList.add('on'); clearTimeout(upMsg.t); if (!hold) return; upMsg.t = setTimeout(function(){ u.classList.remove('on'); }, hold); }
+  window.addEventListener('beforeunload', function(e){ if (UPBUSY){ e.preventDefault(); e.returnValue = ''; } });
+  function reloadEdit(msg){ return load().then(function(){ var g = document.querySelector('#wrap .grid'); if (g && EDIT) g.classList.add('editing'); updBar(); upMsg(msg, 20000); }); }
   function addFiles(list){
     if (!EDIT || UPBUSY) return;
     var files = [].filter.call(list || [], function(f){ return /^(image|video)\//.test(mimeOf(f)); });
     if (!files.length){ $('emsg').textContent = 'Only photos and videos can be added.'; return; }
-    UPBUSY = true; $('eAdd').disabled = true; $('eLink').disabled = true;
+    var code = EDIT; UPBUSY = true; $('eAdd').disabled = true; $('eLink').disabled = true;
     var i = 0, ok = 0, there = 0, bad = [];
     function next(){
       if (i >= files.length){
@@ -239,19 +242,19 @@
         return reloadEdit(m);
       }
       var f = files[i++], label = 'Adding ' + i + ' of ' + files.length + ' (' + f.name + ')';
-      $('emsg').textContent = label + '…';
-      return upOne(f, label).then(function(r){ if (r === 'there') there++; else ok++; }, function(e){ bad.push(f.name + ' - ' + ((e && e.message) || 'failed')); }).then(next);
+      upMsg(label + ' - 0%');
+      return upOne(f, label, code).then(function(r){ if (r === 'there') there++; else ok++; }, function(e){ bad.push(f.name + ' - ' + ((e && e.message) || 'failed')); }).then(next);
     }
     next();
   }
   function addLink(u){
     u = String(u || '').trim(); if (!EDIT || UPBUSY || !u) return;
-    UPBUSY = true; $('eUrlGo').disabled = true; $('emsg').textContent = 'Fetching the link…';
-    post({ act: 'addUrl', a: a, code: EDIT, url: u }).then(function(r){
+    var code = EDIT; UPBUSY = true; $('eUrlGo').disabled = true; upMsg('Fetching the link…');
+    post({ act: 'addUrl', a: a, code: code, url: u }).then(function(r){
       UPBUSY = false; $('eUrlGo').disabled = false;
       if (r && r.ok){ $('eUrl').value = ''; return reloadEdit(r.msg || 'Added.'); }
-      $('emsg').textContent = (r && r.msg) || 'Could not add that link.';
-    }).catch(function(){ UPBUSY = false; $('eUrlGo').disabled = false; $('emsg').textContent = 'Could not add that link - please try again.'; });
+      upMsg((r && r.msg) || 'Could not add that link.', 20000);
+    }).catch(function(){ UPBUSY = false; $('eUrlGo').disabled = false; upMsg('Could not add that link - please try again.', 20000); });
   }
   $('eAdd').onclick = function(){ $('eFile').click(); };
   $('eFile').onchange = function(){ addFiles(this.files); this.value = ''; };
