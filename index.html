@@ -57,6 +57,10 @@
   .ebar .done{background:#e2e8f0;color:var(--ink)}
   .ebar span{font-size:14px;color:#475569;width:100%;text-align:center}
   .ebar .turn{background:#e0f2fe;color:var(--deep)}
+  .ebar .add{background:#dcfce7;color:#166534}
+  .ebar .urlrow{display:none;width:100%;gap:8px;justify-content:center}.ebar .urlrow.on{display:flex}
+  .ebar .urlrow input{flex:1;max-width:420px;border:1px solid #cbd5e1;border-radius:999px;padding:10px 14px;font:inherit}
+  body.dropping:after{content:'Drop to add to this album';position:fixed;inset:0;background:rgba(19,184,230,.85);color:#fff;font-size:26px;font-weight:700;display:flex;align-items:center;justify-content:center;z-index:50;pointer-events:none}
   .tile img{transition:transform .2s}
 </style>
 </head>
@@ -66,7 +70,7 @@
   <div class="job"><div class="addr" id="addr">Job photos</div><div class="meta" id="meta">Loading…</div><span class="pill" id="count" style="display:none"></span></div>
 </div>
 <div class="wrap" id="wrap"><div class="msg">Loading the photos…</div></div>
-<div class="ebar" id="ebar"><span id="emsg">Tap the photos to select them.</span><button class="turn" id="eTurn" disabled>Turn ↻</button><button class="go" id="eSave" style="display:none">Save turns</button><button class="go" id="eGo" disabled>Remove</button><button class="done" id="eDone">Done</button></div>
+<div class="ebar" id="ebar"><span id="emsg">Tap the photos to select them.</span><div class="urlrow" id="eUrlRow"><input id="eUrl" type="url" placeholder="Paste a link to a photo or video"><button class="go" id="eUrlGo">Add</button></div><input type="file" id="eFile" accept="image/*,video/*" multiple style="display:none"><button class="add" id="eAdd">Add files</button><button class="add" id="eLink">Add link</button><button class="turn" id="eTurn" disabled>Turn ↻</button><button class="go" id="eSave" style="display:none">Save turns</button><button class="go" id="eGo" disabled>Remove</button><button class="done" id="eDone">Done</button></div>
 <div class="foot">Job photos supplied by <b>Viva Plumbing</b><br><button class="mail" id="mail" type="button">info@vivaplumbing.com</button> · 0475 521 500
   <div class="ask" id="ask"><label for="askIn">Send us an email</label><div class="row"><input id="askIn" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Your email address"><button id="askGo" type="button">Send</button></div><div class="note" id="askNote"></div></div>
 </div>
@@ -199,9 +203,75 @@
   $('askGo').onclick = send;
   $('askIn').addEventListener('keyup', function(e){ if (e.key === 'Enter') send(); });
 
+  // Add photos and videos to the album (after the code is entered): choose files, drag and drop, or paste a link.
+  var UPBUSY = false;
+  function mimeOf(f){ if (f.type) return f.type; var x = (f.name.split('.').pop() || '').toLowerCase(); return ({ jpg:'image/jpeg', jpeg:'image/jpeg', png:'image/png', heic:'image/heic', heif:'image/heif', webp:'image/webp', gif:'image/gif', mp4:'video/mp4', mov:'video/quicktime', m4v:'video/x-m4v', webm:'video/webm', '3gp':'video/3gpp' })[x] || ''; }
+  function b64(blob){ return new Promise(function(res, rej){ var fr = new FileReader(); fr.onload = function(){ res(String(fr.result).split(',')[1] || ''); }; fr.onerror = rej; fr.readAsDataURL(blob); }); }
+  function upOne(f, label){
+    return post({ act: 'addStart', a: a, code: EDIT, name: f.name, mime: mimeOf(f), size: f.size }).then(function(r){
+      if (!r || !r.ok) throw new Error((r && r.msg) || 'Could not start the upload.');
+      if (r.exists) return 'there';
+      var CH = 3 * 1024 * 1024, off = 0;
+      function step(tries){
+        var end = Math.min(off + CH, f.size);
+        return b64(f.slice(off, end)).then(function(s){ return post({ act: 'addChunk', id: r.id, code: EDIT, offset: off, b64: s }); }).then(function(c){
+          if (!c || !c.ok) throw new Error((c && c.msg) || 'The upload failed.');
+          off = end; $('emsg').textContent = label + ' - ' + Math.round(off / f.size * 100) + '%';
+          if (c.done) return 'ok';
+          if (off >= f.size) throw new Error('The upload did not finish.');
+          return step(0);
+        }, function(err){ if (tries < 2 && !(err && err.message && /upload|Drive|timed/i.test(err.message))) return step(tries + 1); throw err; });
+      }
+      return step(0);
+    });
+  }
+  function reloadEdit(msg){ return load().then(function(){ var g = document.querySelector('#wrap .grid'); if (g && EDIT) g.classList.add('editing'); updBar(); $('emsg').textContent = msg; }); }
+  function addFiles(list){
+    if (!EDIT || UPBUSY) return;
+    var files = [].filter.call(list || [], function(f){ return /^(image|video)\//.test(mimeOf(f)); });
+    if (!files.length){ $('emsg').textContent = 'Only photos and videos can be added.'; return; }
+    UPBUSY = true; $('eAdd').disabled = true; $('eLink').disabled = true;
+    var i = 0, ok = 0, there = 0, bad = [];
+    function next(){
+      if (i >= files.length){
+        UPBUSY = false; $('eAdd').disabled = false; $('eLink').disabled = false;
+        var m = ok + ' added' + (there ? ', ' + there + ' already in the album' : '') + (bad.length ? '. NOT added: ' + bad.join('; ') : '.');
+        return reloadEdit(m);
+      }
+      var f = files[i++], label = 'Adding ' + i + ' of ' + files.length + ' (' + f.name + ')';
+      $('emsg').textContent = label + '…';
+      return upOne(f, label).then(function(r){ if (r === 'there') there++; else ok++; }, function(e){ bad.push(f.name + ' - ' + ((e && e.message) || 'failed')); }).then(next);
+    }
+    next();
+  }
+  function addLink(u){
+    u = String(u || '').trim(); if (!EDIT || UPBUSY || !u) return;
+    UPBUSY = true; $('eUrlGo').disabled = true; $('emsg').textContent = 'Fetching the link…';
+    post({ act: 'addUrl', a: a, code: EDIT, url: u }).then(function(r){
+      UPBUSY = false; $('eUrlGo').disabled = false;
+      if (r && r.ok){ $('eUrl').value = ''; return reloadEdit(r.msg || 'Added.'); }
+      $('emsg').textContent = (r && r.msg) || 'Could not add that link.';
+    }).catch(function(){ UPBUSY = false; $('eUrlGo').disabled = false; $('emsg').textContent = 'Could not add that link - please try again.'; });
+  }
+  $('eAdd').onclick = function(){ $('eFile').click(); };
+  $('eFile').onchange = function(){ addFiles(this.files); this.value = ''; };
+  $('eLink').onclick = function(){ $('eUrlRow').classList.toggle('on'); if ($('eUrlRow').classList.contains('on')) $('eUrl').focus(); };
+  $('eUrlGo').onclick = function(){ addLink($('eUrl').value); };
+  $('eUrl').addEventListener('keyup', function(e){ if (e.key === 'Enter') addLink(this.value); });
+  var dragN = 0;
+  document.addEventListener('dragenter', function(e){ if (!EDIT) return; e.preventDefault(); dragN++; document.body.classList.add('dropping'); });
+  document.addEventListener('dragleave', function(){ if (!EDIT) return; dragN = Math.max(0, dragN - 1); if (!dragN) document.body.classList.remove('dropping'); });
+  document.addEventListener('dragover', function(e){ if (EDIT) e.preventDefault(); });
+  document.addEventListener('drop', function(e){
+    if (!EDIT) return; e.preventDefault(); dragN = 0; document.body.classList.remove('dropping');
+    var dt = e.dataTransfer; if (!dt) return;
+    if (dt.files && dt.files.length) addFiles(dt.files);
+    else { var u = dt.getData('text/uri-list') || dt.getData('text/plain'); if (/^https:\/\//i.test(u)){ $('eUrlRow').classList.add('on'); $('eUrl').value = u.split('\n')[0]; addLink(u.split('\n')[0]); } }
+  });
+
   function selCount(){ return Object.keys(SEL).length; }
   function startEdit(){ SEL = {}; var g = document.querySelector('#wrap .grid'); if (g) g.classList.add('editing'); $('ebar').classList.add('on'); updBar(); window.scrollTo(0, 0); }
-  function stopEdit(){ EDIT = ''; SEL = {}; TURN = {}; showTurns(); var g = document.querySelector('#wrap .grid'); if (g) g.classList.remove('editing'); [].forEach.call(document.querySelectorAll('.tile.sel'), function(t){ t.classList.remove('sel'); }); $('ebar').classList.remove('on'); }
+  function stopEdit(){ EDIT = ''; SEL = {}; TURN = {}; showTurns(); var g = document.querySelector('#wrap .grid'); if (g) g.classList.remove('editing'); [].forEach.call(document.querySelectorAll('.tile.sel'), function(t){ t.classList.remove('sel'); }); $('ebar').classList.remove('on'); $('eUrlRow').classList.remove('on'); }
   function pick(b){ var id = ITEMS[+b.getAttribute('data-k')].id; if (SEL[id]){ delete SEL[id]; b.classList.remove('sel'); } else { SEL[id] = 1; b.classList.add('sel'); } updBar(); }
   function updBar(){
     var n = selCount(), t = Object.keys(TURN).filter(function(k){ return TURN[k] % 4; }).length;
