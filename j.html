@@ -4,6 +4,7 @@
 <script>
 // Short job link: photos.vivaplumbing.com/j?<calendar event id> -> Field Aid on that job (sign-in still needed).
 var id = (location.search.slice(1).split('&')[0] || '').replace(/[^A-Za-z0-9_]/g, '');
-location.replace('https://script.google.com/macros/s/AKfycbxFnod5ajEglmiKF5XsWu5XoUgWbQbDeaCqvbm0J9Kuy7qZ2JGsbGJKPFNJKgwgwhmy/exec' + (id ? '?job=' + id + '%40google.com' : ''));
+// a 6-character job code goes as it is; a full calendar id gets its @google.com back
+location.replace('https://script.google.com/macros/s/AKfycbxFnod5ajEglmiKF5XsWu5XoUgWbQbDeaCqvbm0J9Kuy7qZ2JGsbGJKPFNJKgwgwhmy/exec' + (id ? '?job=' + id + (id.length >= 20 ? '%40google.com' : '') : ''));
 </script>
 </head><body style="font-family:sans-serif;padding:24px">Opening Field Aid…</body></html>
