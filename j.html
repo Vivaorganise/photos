@@ -2,9 +2,17 @@
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Field Aid - Viva Plumbing</title>
 <script>
-// Short job link: photos.vivaplumbing.com/j?<calendar event id> -> Field Aid on that job (sign-in still needed).
+// Short job link: vivaplumbing.com/j?<code> -> Field Aid on that job (sign-in still needed).
 var id = (location.search.slice(1).split('&')[0] || '').replace(/[^A-Za-z0-9_]/g, '');
 // a 6-character job code goes as it is; a full calendar id gets its @google.com back
-location.replace('https://script.google.com/macros/s/AKfycbxFnod5ajEglmiKF5XsWu5XoUgWbQbDeaCqvbm0J9Kuy7qZ2JGsbGJKPFNJKgwgwhmy/exec' + (id ? '?job=' + id + (id.length >= 20 ? '%40google.com' : '') : ''));
+var target = 'https://script.google.com/macros/s/AKfycbxFnod5ajEglmiKF5XsWu5XoUgWbQbDeaCqvbm0J9Kuy7qZ2JGsbGJKPFNJKgwgwhmy/exec' + (id ? '?job=' + id + (id.length >= 20 ? '%40google.com' : '') : '');
+// 24 Nov (Richie): always open in Chrome. An Android phone whose default browser is another one (Samsung Internet etc)
+// hands the link to Chrome; if Chrome is not there, it carries on in this browser.
+var ua = navigator.userAgent || '';
+if (/Android/i.test(ua) && /SamsungBrowser|EdgA|Firefox|FxiOS|OPR|MiuiBrowser|HuaweiBrowser|YaBrowser|DuckDuckGo/i.test(ua)) {
+  location.href = 'intent://' + target.replace(/^https:\/\//, '') + '#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=' + encodeURIComponent(target) + ';end';
+} else {
+  location.replace(target);
+}
 </script>
 </head><body style="font-family:sans-serif;padding:24px">Opening Field Aid…</body></html>
