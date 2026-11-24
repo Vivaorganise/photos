@@ -1,18 +1,41 @@
 <!doctype html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Field Aid - Viva Plumbing</title>
+<style>html,body{margin:0;height:100%;font-family:sans-serif}#fa{position:fixed;top:0;left:0;width:100%;height:100%;border:0}.msg{padding:24px;line-height:1.5}.btn{display:inline-block;margin-top:12px;padding:12px 18px;background:#0e7490;color:#fff;border-radius:10px;text-decoration:none}</style>
 <script>
 // Short job link: vivaplumbing.com/j?<code> -> Field Aid on that job (sign-in still needed).
-var id = (location.search.slice(1).split('&')[0] || '').replace(/[^A-Za-z0-9_]/g, '');
+var FA = 'https://script.google.com/macros/s/AKfycbxFnod5ajEglmiKF5XsWu5XoUgWbQbDeaCqvbm0J9Kuy7qZ2JGsbGJKPFNJKgwgwhmy/exec';
+var q = location.search.slice(1), mode = '', sw = '';
+// 24 Nov (Richie): a phone signed into several Google accounts gets Google's "Sorry, unable to open the file" on
+// script.google.com. "Inside" mode opens Field Aid inside this page instead, so Google's own address never loads on
+// its own. Turned on once per phone with vivaplumbing.com/j?inside=on (off: ?inside=off). Phones without it are unchanged.
+var m = q.match(/(?:^|&)inside=(on|off)(?:&|$)/);
+try { if (m) localStorage.setItem('fa_inside', m[1] === 'on' ? '1' : ''); mode = localStorage.getItem('fa_inside') || ''; } catch (e) { mode = ''; }
+if (m) sw = m[1];
+var id = sw ? '' : (q.split('&')[0] || '').replace(/[^A-Za-z0-9_]/g, '');
 // a 6-character job code goes as it is; a full calendar id gets its @google.com back
-var target = 'https://script.google.com/macros/s/AKfycbxFnod5ajEglmiKF5XsWu5XoUgWbQbDeaCqvbm0J9Kuy7qZ2JGsbGJKPFNJKgwgwhmy/exec' + (id ? '?job=' + id + (id.length >= 20 ? '%40google.com' : '') : '');
-// 24 Nov (Richie): always open in Chrome. An Android phone whose default browser is another one (Samsung Internet etc)
-// hands the link to Chrome; if Chrome is not there, it carries on in this browser.
-var ua = navigator.userAgent || '';
-if (/Android/i.test(ua) && /SamsungBrowser|EdgA|Firefox|FxiOS|OPR|MiuiBrowser|HuaweiBrowser|YaBrowser|DuckDuckGo/i.test(ua)) {
-  location.href = 'intent://' + target.replace(/^https:\/\//, '') + '#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=' + encodeURIComponent(target) + ';end';
-} else {
-  location.replace(target);
+var target = FA + (id ? '?job=' + id + (id.length >= 20 ? '%40google.com' : '') : '');
+if (!sw && !mode) {
+  // 24 Nov (Richie): always open in Chrome. An Android phone whose default browser is another one (Samsung Internet etc)
+  // hands the link to Chrome; if Chrome is not there, it carries on in this browser.
+  var ua = navigator.userAgent || '';
+  if (/Android/i.test(ua) && /SamsungBrowser|EdgA|Firefox|FxiOS|OPR|MiuiBrowser|HuaweiBrowser|YaBrowser|DuckDuckGo/i.test(ua)) {
+    location.href = 'intent://' + target.replace(/^https:\/\//, '') + '#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=' + encodeURIComponent(target) + ';end';
+  } else {
+    location.replace(target);
+  }
+}
+function start() {
+  if (sw) {
+    document.body.innerHTML = '<div class="msg"><b>' + (sw === 'on' ? 'Done - this phone now opens Field Aid inside the Viva page.' : 'Done - this phone opens Field Aid the normal way again.') +
+      '</b><br>Field Aid links on this phone will open this way from now on.<br><a class="btn" href="' + target + '"' + (sw === 'on' ? ' onclick="return openInside()"' : '') + '>Open Field Aid</a></div>';
+    return;
+  }
+  if (mode) openInside();
+}
+function openInside() {
+  document.body.innerHTML = '<iframe id="fa" src="' + target + '" allow="geolocation; clipboard-read; clipboard-write; camera; microphone; fullscreen" title="Field Aid"></iframe>';
+  return false;
 }
 </script>
-</head><body style="font-family:sans-serif;padding:24px">Opening Field Aid…</body></html>
+</head><body style="font-family:sans-serif;padding:0" onload="start()"><div class="msg">Opening Field Aid…</div></body></html>
