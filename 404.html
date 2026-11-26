@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Viva Plumbing</title>
+<script>
+/* 27 Nov 2026: a mistyped album address (e.g. /a=<id> with the "?" missing, or /<id> on its own) goes to the album. */
+(function () {
+  var all = decodeURIComponent(location.pathname + location.search + location.hash);
+  var m = all.match(/(?:^|[\/?&#])a\s*[=\/]\s*([\w-]{20,})/) || location.pathname.match(/^\/+([\w-]{25,})\/?$/);
+  if (m) location.replace('/?a=' + m[1]);
+})();
+</script>
+<style>body{margin:0;font-family:"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:#eef9fd;color:#0f172a;text-align:center}
+.hero{background:#13b8e6;color:#fff;padding:28px 18px}.w{font-weight:300;font-size:30px}.box{max-width:480px;margin:30px auto;background:#fff;border-radius:12px;padding:26px;line-height:1.6}
+a{color:#0a8fbd}</style></head>
+<body><div class="hero"><div class="w">viva plumbing</div></div>
+<div class="box">This page could not be found.<br>Please check the link, or contact us:<br><b>info@vivaplumbing.com · 0475 521 500</b></div>
+</body></html>
